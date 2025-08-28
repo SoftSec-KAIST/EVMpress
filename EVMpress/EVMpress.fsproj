@@ -1,0 +1,100 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Remove="Logic\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="Utils\DisjointSet.fs" />
+    <Compile Include="CFG\CFGUtils.fs" />
+    <Compile Include="CFG\CFGTests.fs" />
+    <Compile Include="Type\DataFlowManager.fs" />
+    <Compile Include="Type\SuperCFGManager.fs" />
+    <Compile Include="Type\Inferrer.fs" />
+    <Compile Include="OldImpl\Prelude.fs" />
+    <Compile Include="OldImpl\CPTypes.fs" />
+    <Compile Include="OldImpl\Types.fs" />
+    <Compile Include="OldImpl\TypeRecTypes.fs" />
+    <Compile Include="OldImpl\DualDictionary.fs" />
+    <Compile Include="OldImpl\IOHelper.fs" />
+    <Compile Include="OldImpl\IRHelper.fs" />
+    <Compile Include="OldImpl\Loop.fs" />
+    <Compile Include="OldImpl\TypingEngine\Helper.fs" />
+    <Compile Include="OldImpl\TypingEngine\SolveInfo.fs" />
+    <Compile Include="OldImpl\TypingEngine\Extract.fs" />
+    <Compile Include="OldImpl\TypingEngine\SolveCalldata.fs" />
+    <Compile Include="OldImpl\TypingEngine\SolveMemory.fs" />
+    <Compile Include="OldImpl\TypingEngine\SolveStorage.fs" />
+    <Compile Include="OldImpl\TypingEngine\Solve.fs" />
+    <Compile Include="OldImpl\TypeRec.fs" />
+    <Compile Include="Common\Timer.fs" />
+    <Compile Include="Common\Results.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\B2R2\src\BinIR.Tests\B2R2.BinIR.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\BinIR\B2R2.BinIR.fsproj" />
+    <ProjectReference Include="..\B2R2\src\Core.Tests\B2R2.Core.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\Core\B2R2.Core.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\API\B2R2.FrontEnd.API.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\ARM32.Tests\B2R2.FrontEnd.ARM32.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\ARM32\B2R2.FrontEnd.ARM32.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\ARM64.Tests\B2R2.FrontEnd.ARM64.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\ARM64\B2R2.FrontEnd.ARM64.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\AVR.Tests\B2R2.FrontEnd.AVR.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\AVR\B2R2.FrontEnd.AVR.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\BinFile.Tests\B2R2.FrontEnd.BinFile.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\BinFile\B2R2.FrontEnd.BinFile.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\BinLifter.Tests\B2R2.FrontEnd.BinLifter.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\BinLifter\B2R2.FrontEnd.BinLifter.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\CIL\B2R2.FrontEnd.CIL.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\EVM.Tests\B2R2.FrontEnd.EVM.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\EVM\B2R2.FrontEnd.EVM.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\Intel.Tests\B2R2.FrontEnd.Intel.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\Intel\B2R2.FrontEnd.Intel.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\MIPS.Tests\B2R2.FrontEnd.MIPS.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\MIPS\B2R2.FrontEnd.MIPS.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\NameMangling.Tests\B2R2.FrontEnd.NameMangling.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\NameMangling\B2R2.FrontEnd.NameMangling.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\PARISC.Tests\B2R2.FrontEnd.PARISC.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\PARISC\B2R2.FrontEnd.PARISC.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\PPC32\B2R2.FrontEnd.PPC32.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\Python\B2R2.FrontEnd.Python.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\Registers\B2R2.FrontEnd.Registers.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\RISCV64\B2R2.FrontEnd.RISCV64.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\S390.Tests\B2R2.FrontEnd.S390.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\S390\B2R2.FrontEnd.S390.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\SH4\B2R2.FrontEnd.SH4.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\SPARC.Tests\B2R2.FrontEnd.SPARC.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\SPARC\B2R2.FrontEnd.SPARC.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\TMS320C6000.Tests\B2R2.FrontEnd.TMS320C6000.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\TMS320C6000\B2R2.FrontEnd.TMS320C6000.fsproj" />
+    <ProjectReference Include="..\B2R2\src\FrontEnd\WASM\B2R2.FrontEnd.WASM.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\API.Tests\B2R2.MiddleEnd.API.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\API\B2R2.MiddleEnd.API.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\BinGraph.Tests\B2R2.MiddleEnd.BinGraph.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\BinGraph\B2R2.MiddleEnd.BinGraph.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\ConcEval\B2R2.MiddleEnd.ConcEval.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\ControlFlowAnalysis\B2R2.MiddleEnd.ControlFlowAnalysis.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\ControlFlowGraph\B2R2.MiddleEnd.ControlFlowGraph.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\DataFlow.Tests\B2R2.MiddleEnd.DataFlow.Tests.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\DataFlow\B2R2.MiddleEnd.DataFlow.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\LLVM\B2R2.MiddleEnd.LLVM.fsproj" />
+    <ProjectReference Include="..\B2R2\src\MiddleEnd\SSA\B2R2.MiddleEnd.SSA.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Keccak256" Version="1.0.0" />
+    <PackageReference Include="NuGet.CommandLine" Version="6.14.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>
