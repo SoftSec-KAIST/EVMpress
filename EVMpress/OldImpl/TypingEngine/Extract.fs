@@ -111,8 +111,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
                 assert false
               *)
   #endif
-              (*TODO: how to handle multiple incoming pointers?
-                return multiple mem vars and consider all the cases? *)
               if Seq.length followedMemVars > 1 then
                 Seq.tryHead followedMemVars
               else
@@ -205,7 +203,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
     1. collect tags
   *)
   (* we also resolve memory aliasing here *)
-  (* 스택 터져서 tail-recursion으로 *)
   let rec dfs recentPrivAddrs visited vs =
     match vs with
     | [] -> ()
@@ -265,8 +262,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
         match stmt with
         (* Stmt - phi
            we extract useful information, especially related to loops *)
-        (* TODO: 이러면 gas 이런거 엄청 전파될듯*)
-        (* TODO: bug 존재 *)
         | Phi ({ Kind = StackVar _ } as var, ids) ->
   #if TYPEDEBUG
           //printfn "phi var (0x%x) %A: %A" v.VData.PPoint.Address var exprs
@@ -344,7 +339,7 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
           | BinOp (opType, _, e1, e2) when
                opType = BinOpType.ADD
             || opType = BinOpType.SUB
-            //|| opType = BinOpType.MUL // ??? (e.g. sload(n) * 0x100)
+            //|| opType = BinOpType.MUL // (e.g. sload(n) * 0x100)
             || opType = BinOpType.DIV // 이것도 마찬가지 storage
             || opType = BinOpType.MOD
             || opType = BinOpType.SHR
@@ -392,10 +387,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
             ()
           | _ -> ()
 
-          (*
-            그냥 쌩으로 KExpr 파싱
-            근데 sym var 아님ㅎ
-          *)
           match KExpr.ofExpr funcInfo None e with
           (*
             bytes
@@ -444,8 +435,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
             fnAddTag newTagVar <| TagHasType TyBytes |> ignore
           (*
             bytes length pattern
-
-            TODO: 이값이 freemem의 첫번째에 할당된다면 => bytes의 힌트다
           *)
           | KBinOp
              (_, BinOpType.DIV,
@@ -482,7 +471,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
               && bv_slot = bv_slot_2
             ->
             let symLoc = SymLoc.Hash [ SymLoc.Const bv_slot ] + SymLoc.PlaceHolder
-            (*TODO: symloc을 이렇게 잡는게 맞나? sload(sha3(n) + i) *)
             let newTagVar = TagVarSym symLoc
             addNewTagVar newTagVar
             fnAddTag newTagVar <| TagHasType TyBytes |> ignore
@@ -537,12 +525,7 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
             fnAddTag newTagVar <| TagHasType TyBytes |> ignore
           | _ -> ()
 
-          (*
-            그냥 쌩으로 KExpr 파싱
-            symbolic variable 도입
-          *)
           match KExpr.ofExpr funcInfo None e with
-          (*TODO: 나중에는 모두 cosntant folding해서 mask얻는 식으로 ㄱㄱ -> 논문에도 그렇게*)
           (*
             sload(n) / exp(0x100, k)
             => var(slot=n,offset=k)
@@ -847,7 +830,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
             | KNum (_, bv) when BitVector.isEqualTo bv 0x40UL ->
               // fnAddTagPub var <| TagHasType TyBytes |> ignore
               fnAddTagPub var <| TagIsFreeMemPtr |> ignore
-              (* 나중에 타입이 결정되지 않았다면 bytes라고 가정한다 *)
             | _ -> ()
   #if TYPEDEBUG
             printfn "*mload loc: %A" kLoc
@@ -1051,11 +1033,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
             match kE with
             (*
               ((sload(n) & 0x1) = (someVar < 0x20)) = 0
-              might be due to optim..
-              not ((A && B) or (!A && !B))
-              => (A || B) and (A || B) => A || B...!!!!
-              wow?
-              => bytes to memory 패턴
             *)
             | KCast
                 (_, _,
@@ -1086,11 +1063,7 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
                   SymLoc.Hash [ SymLoc.Const bv_slot ] + SymLoc.PlaceHolder
               let newTagVar = TagVarSym symLocPos
               addNewTagVar newTagVar
-              (* bytes로 쓰였다는 tag 추가 *)
               fnAddTag newTagVar <| TagHasType TyBytes |> ignore
-            (*
-              이것도 bytes 변환 패턴
-            *)
             | KBinOp
                 (_, BinOpType.SUB,
                  KBinOp
@@ -1107,15 +1080,12 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
               when BitVector.isEqualToUInt64 bv_0x1 1UL
                 && BitVector.isEqualToUInt64 bv_0x20 0x20UL
                 && fnIsPhiVar (KExpr.toVar somePhiVar) ->
-              (* 아 goto 마렵다*)
               let symLocPos = (* sha3(n) + _ *) SymLoc.Hash [ SymLoc.Const bv_slot ] + SymLoc.PlaceHolder
               let newTagVar = TagVarSym symLocPos
               addNewTagVar newTagVar
-              (* bytes로 쓰였다는 tag 추가 *)
               fnAddTag newTagVar <| TagHasType TyBytes |> ignore
             (*
               condjmp(iszero(var),...)
-              높은 확률로 bool이다
             *)
             | KCast (_, _, KRelOp (_, RelOpType.EQ, someKExpr, KNum (_, bv_0)))
             | KCast (_, _, KRelOp (_, RelOpType.EQ, KNum (_, bv_0), someKExpr))
@@ -1144,7 +1114,6 @@ let rec extractTagsFromPub (brew: BinaryBrew<EVMFuncUserContext, _>)
               | _ -> ()
             (*
               condjmp(var,...)
-              높은 확률로 bool이다
             *)
             | someKExpr ->
               let someVar = KExpr.toVar someKExpr

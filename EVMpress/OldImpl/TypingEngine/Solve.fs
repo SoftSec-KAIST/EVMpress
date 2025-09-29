@@ -13,22 +13,14 @@ open EVMpress.Type
 
 let rt =256<rt>
 
-///
-/// SolveMemory에서 memory 관련 sym loc들 모였으면
-/// 여기서 type resolve
-///
 let private handleMemorySymLoc solveInfo currTagVar tags =
   match currTagVar with
-  (*
-    어떻게든 서로 간 전파하도록 해서 -> 어떻게든 충분한 tag들이 모이면 여기로 오게끔 헀음
-  *)
   | TagVarSym (SymLoc.FreeMemPtr (pubAddr, rootMid) as symLocPtr) ->
     (*
       handle constant-sized bytes
     *)
     let symLocPtr_0x20 = symLocPtr + SymLoc.Const (BitVector(0x20UL, rt))
     let symLocVal = SymLoc.MLoad (pubAddr, symLocPtr)
-    (* 첫번째 값 *(mptr + 0)에 대한 tags를 보고 판단한다 *)
     for tag in (solveInfo: SolveInfo).GetTagsFromTagVar <| TagVarSym symLocVal do
       match tag with
       | TagEqualsTo dstVar ->

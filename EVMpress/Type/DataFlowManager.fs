@@ -102,7 +102,7 @@ type DataFlowManager (hdl: BinHandle) =
 
   /// Compute a SSA graph of the given CFG, and its data-flow information.
   member _.RegisterCFG addr g =
-    assert (not <| cache.ContainsKey addr)
+    // assert (not <| cache.ContainsKey addr)
     if usesMulticore then
       stream.Post (addr, g) |> ignore
     else

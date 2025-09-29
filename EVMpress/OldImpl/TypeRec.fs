@@ -788,8 +788,6 @@ type Solver () =
     dl
 *)
 
-/// TODO: This is an old implementation but with a little bit of modification,
-/// so it should be cleaned up later.
 type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                     pubBodyAddresses: Addr list) =
   let hdl = brew.BinHandle
@@ -912,7 +910,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
 
   let getOffsetFromBigIntBitmask bi =
     let rec fn bi off =
-      (* 처음으로 0이 아닌 지점을 만났다면 *)
       if (bigint.Remainder (bi, 256)) <> 0 then off
       else
         let bi = bi >>> 8
@@ -934,7 +931,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
         let foundRootVar = findRootVar cpState v
         TagVarPublic (pubAddr, foundRootVar)
       | _ -> tv
-    /// 같은 tag var 모으기. 디버깅하려고.. 도덕책 ADD 연산 어디서 오는거임 ㅠㅠ
     let gatherEqualTagVars (tv: TagVar) =
       let rec fn tv acc =
         let acc = (acc: ImmSet<_>).Add tv
@@ -977,7 +973,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
         match t with
         | TagIsFreeMemPtr -> true
         | _ -> false)
-    /// 태그들로부터 타입을 결정하는 함수.
     let rec fnGetTypeFromTags tags =
       fnGetTypeFromTagsAux ImmDict.Empty tags
 
@@ -1014,11 +1009,9 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
       else
         match ty with
         | TyUInt 160 -> TyAddr
-        (* 이미 위에서 변환됐어야할 거 같은데 *)
         | TyUInt 8 when containsUsedAsHighLevJumpCond tags -> TyBool
         | _ -> ty
     and fnGetTypeFromTagVar var =
-      (* FIXME: 여기서 root var 얻는게 맞는 디자인일까? *)
       let rootVar = fnFindRootVarFromTagVar var
       fnGetTypeFromTagVarAux ImmDict.Empty rootVar
     and fnGetTypeFromTagVarAux (visited: ImmDict<_, _>) var =
@@ -1038,17 +1031,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
         | false, _ -> TyTop
         | true, tags ->
           let ty = fnGetTypeFromTagsAux visited tags
-#if TYPEDEBUG
-          printfn "update memoized type: %A -> %A" var ty
-          (*
-          for tag in tags do
-            let equalTagVars = gatherEqualTagVars var
-            for tv in equalTagVars do
-              if isRegisteredExtraction tv tag then
-                let kExpr = fnGetKExprFromTagVar perPubFuncDataFlows tv
-                printfn "이놈이다: %A %A %A" tv tag kExpr
-          *)
-#endif
           typeMemo[var] <- ty
           ty
     let fnHasTag var tag =
@@ -1144,7 +1126,7 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
           let symLocElem = SymLoc.CLoad (pubAddr, symLoc)
           let elemTy' = fnGetTypeFromTagVar (TagVarSym symLocElem)
           TyArray (elemTy', len)
-        | TyBytes -> TyBytes (* TODO: 안전하게... 괜히 기존 구현 영향줄까봐 *)
+        | TyBytes -> TyBytes
         | _ -> TyBot
       | SymLoc.CLoad (pubAddr, SymLoc.Const bv_loc) ->
         (* check if it is used as ptr *)
@@ -1172,7 +1154,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
           region[locBigint] <- ty
           (*
           let valueTy = fnGetTypeFromTags tags
-          (* array 처리; TODO: elegant하게*)
           let valueTy =
             match valueTy with
             | TyArray (elemTy, len) ->
@@ -1187,8 +1168,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
           *)
         | _ -> ()
       | _ -> ()
-    (*TODO: 다른 로직들도 이렇게 module화 해야함*)
-    /// Symbolic variable -> 실제 type instantiation
     /// 심볼
     /// jidoc
     let handleSymbolicVarStorage (var: TagVar) tags =
@@ -1225,10 +1204,7 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
             1 |-> { 0 |-> ty2 }
             1 |-> { 20 |-> ty3 }
             => 1 |-> { 0 |-> ty2; 20 |-> ty3 }
-            단, 한쪽은 1씩 증가하면서(fieldoff), 다른 한쪽은 바이트단위로 증가하는 mismatch
-            상관없는가?
           *)
-          (* TODO: 이거 일반화 해서 구현해야함*)
           let fieldOffInt = BitVector.ToInt32 bv_structFieldOff
           let posMaskInt = BitVector.getMSBOffset bv_posMask
           let valueTy = fnGetTypeFromTags tags
@@ -1240,7 +1216,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
         *)
         | TagVarSym symLoc ->
           match symLoc with
-          (* nested인데, 얘를 감싼 애가 먼저 처리됐다면 처리할 필요 없음 *)
           | _ when symHandledSet.Contains var -> ()
           (*
             sload(sha(loc) + _)
@@ -1270,7 +1245,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
             bytes;
             global dyn array
             sload(sha(loc) + _) & mask
-            TODO: 나중에 코드 공개하기 전에는, 이렇게 maksing하는 것도 다 로직합치셈
           *)
           | SymLoc.BinOp (
               BinOpType.AND,
@@ -1285,8 +1259,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
             let baseTy = fnGetTypeFromTagVar (TagVarSym baseLoc)
             let elemTy = fnGetTypeFromTags tags
             let off = getOffsetFromBigIntBitmask maskBv.BigValue
-            (*TODO: 그냥 모든 경우에 mask 있으면 struct라고 가정하고,
-              나중에 단일인 경우에만 단일로 다시 도입하는게 더 general할듯*)
             let elemTy = TyStruct <| Map.empty.Add (off, elemTy)
             let ty =
               match baseTy with
@@ -1328,7 +1300,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
             mapping (k1 => mapping (k2 => v))
           *)
           | SymLoc.SLoad (SymLoc.Hash [ _; SymLoc.Hash [ _; SymLoc.Const slotBv ] as innerSymLoc ] as outerSymLoc) ->
-            (* first key -- 가장 안쪽이 첫번째임 *)
             let innerTagVarSym = TagVarSym innerSymLoc
             let innerTags = solveInfo.PerVarTags[innerTagVarSym]
             let innerKeyTy = fnGetTypeFromTagVar <| findKeyTagVar innerTags
@@ -1341,14 +1312,12 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
             //storageRegions[slotAndOff] <- TyMapping (keyTy, TyMapping (innerKeyTy, valueTy))
             updateStorageRegion slotBv zeroBv <| TyMapping (innerKeyTy, TyMapping (keyTy, valueTy))
           (*
-            위의 것 + masking (compaction or struct)
           *)
           | SymLoc.BinOp (
               BinOpType.AND,
               SymLoc.SLoad (SymLoc.Hash [ _; SymLoc.Hash [ _; SymLoc.Const slotBv ] as innerSymLoc ] as outerSymLoc),
               SymLoc.Const bvMask
             ) ->
-            (* first key -- 가장 안쪽이 첫번째임 *)
             let innerTagVarSym = TagVarSym innerSymLoc
             let innerTags = solveInfo.PerVarTags[innerTagVarSym]
             let innerKeyTy = fnGetTypeFromTagVar <| findKeyTagVar innerTags
@@ -1383,11 +1352,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
               let ty = TyStruct <| Map.ofList [ (0, ty) ]
               updateStorageRegion slotBv zeroBv ty
             | _ -> ()
-          (*
-            위에거 + masking
-            그냥 단일일 수도, 아니면 struct일수도
-            고려해서 meet 연산
-          *)
           | SymLoc.BinOp (BinOpType.AND, (SymLoc.SLoad (SymLoc.Hash [ _; SymLoc.Const slotBv ]) as parentSymLoc), SymLoc.Const maskBv) ->
             (* get parent tag var *)
             let parentTagVar = TagVarSym parentSymLoc
@@ -1398,23 +1362,19 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
             (* infer types *)
             let keyTy = fnGetTypeFromTagVar keyTagVar
             let valueTy = fnGetTypeFromTagVar valueTagVar
-            symHandledSet.Add parentTagVar |> ignore (* 이걸 통해서 부모 입장에서 중복된 거 방지 *)
+            symHandledSet.Add parentTagVar |> ignore
             //storageRegions[slotAndOff] <- TyMapping (keyTy, valueTy)
             let off = getOffsetFromBigIntBitmask maskBv.BigValue
             let tyStruct = TyStruct <| Map.empty.Add (off, valueTy)
             let finalTy = TyMapping (keyTy, tyStruct)
             //updateStorageRegion slotBv zeroBv <| TyMapping (keyTy, valueTy)
-            (*일단은 이렇게 struct로 보내고, meet 연산 시에 불필요하면 단일로*)
             updateStorageRegion slotBv zeroBv <| finalTy
           | _ -> ()
         | _ -> ()
     (*TODO: optimization: grouping when adding tags *)
     for (KeyValue (var, tags)) in solveInfo.PerVarTags do
-      (* 여기서 SymLoc 등록된 storage/calldata 변수 타입 추론*)
       handleSymbolicVarCalldata var tags
       handleSymbolicVarStorage var tags
-      (* 여기서 priv 타입 추론 *)
-      (* TODO: 모듈화*)
       (* handle priv param/return types *)
       match var with
       | TagVarPrivate (privAddr, nth, isParam) ->
@@ -1434,7 +1394,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
 #endif
       | _ -> ()
 
-      /// TODO: 모듈화
       /// we use a simple worklist algorithm to get all the related tags to a given free mem region
       let backwardSliceToGatherFreeMemStoreTags pubAddr currId upperBoundId =
         let workingMemVars = UniqueQueue ()
@@ -1483,11 +1442,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
           when fnIsKExprFreePtr freePtr1 && freePtr1 = freePtr2 -> true
         | _ -> false
 
-      (* 여기서 pub 타입 추론 *)
-      (* TODO: 모듈화*)
-      (* TODO: 옳은 방향: 먼저 return 명령을 찾고, 해당 명령의 loc으로부터
-         free mem ptr를 찾고, 해당 ptr와 관련한 임의의 store들을 해당 ptr의
-         tag로 추가하게끔 *)
       for tag in tags do
         match tag with
         (* pub func - ret *)
@@ -1539,19 +1493,10 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                 | KBinOp (_, BinOpType.APP, KFuncName "mload", _) ->
                   let kValue = solveInfo.ExpandToKExpr valueTagVar
                   let valueTagVar = KExpr.toVar kValue |> fun v -> TagVarPublic (pubAddr, v)
-                  (*
-                    ex) array[]를 리턴할떄,
-                    | 0x0 | 0x20 | 0x40... |
-                    | 0x20| len  | data... |
-                    여기서 0x20은 len을 가리키므로, mload(mptr + 0x20)과 같이 사용됨
-                    이를 통해 primitive가 아님을 결정함
-                  *)
                   if isTagVarUsedAsOffset valueTagVar
                      || isKExprUsedAsOffsetForReturn kValue
                     (*|| isTagVarLengthField valueTagVar*) then ()
                   else
-                    (* TODO: 리턴 외에도 값을 write하는데, 뭘까
-                       0x00000000000025824328358250920b271f348690*)
                     let ty = fnGetTypeFromTagVar valueTagVar
                     let region = fnGetCalldataReturnRegion pubAddr
                     let valueKExpr = solveInfo.ExpandToKExpr valueTagVar
@@ -1579,7 +1524,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                   ->
                   (* 0x289ba1701c2f088cf0faf8b3705246331cb8a839:
                      (root) free mem can be shared in different areas *)
-                  /// store하는 값의 형태를 본다
                   let valueKExpr = solveInfo.ExpandToKExpr valueTagVar
 #if TYPEDEBUG
                   match valueKExpr with
@@ -1593,18 +1537,14 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                   | _ -> ()
 #endif
                   let fnResolveAliasToGetTagVars valueKExpr =
-                    (* TODO: 전에처럼 우아하게 구현 빼내서 처리 -> aliasing 만 명시적으로 따로 ㄱ*)
                     match valueKExpr with
                     | KBinOp (_, _, KFuncName "mload", KExprList (_, [ kInMem; kAddr ]))
                       when not kAddr.IsKNum
                       ->
-                      /// TODO: stack overflow 잘 처리하기
                       let rec fnHandleAddr acc visited kAddr =
                         match kAddr with
-                        (* TODO: phi 때문에 무한루프 걸리는 경우 처리*)
                         | KVar var when Set.contains var visited ->
                           acc
-                        (* 읽는 주소가 phi인 경우 *)
                         | KVar var ->
                           let visited = Set.add var visited
                           // let cpState = fnGetCPStateFromTagVar valueTagVar
@@ -1639,7 +1579,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                               let upperBoundId = rootFreeMemVar.Identifier
                               let currId = kInMem |> KExpr.toVar |> fun v -> v.Identifier
                               let relatedMemTags = backwardSliceToGatherFreeMemStoreTags pubAddr currId upperBoundId
-                              (* 이제 off에 기록하는 mstore 연산을 찾아본다 *)
                               relatedMemTags
                               |> Seq.tryPick (fun memTag ->
                                 match memTag with
@@ -1662,12 +1601,11 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                               |> function
                                 | None -> []
                                 | Some foundRecentValueTagVar ->
-                                  (* TODO: 연쇄적으로 aliasing 처리해야할 수도 있음*)
                                   [foundRecentValueTagVar]
                         | _ -> []
                       fnHandleAddr [] Set.empty kAddr
                     | _ -> []
-                  let foundValueTagVars = (*여기서 mem aliasing 필요하다면 하라 *)
+                  let foundValueTagVars =
                     fnResolveAliasToGetTagVars valueKExpr
                   (* now, aliasing is resolved *)
 
@@ -1690,7 +1628,7 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                             let off = BitVector.ToInt32 bv_off
                             // FIXME: why happening?
                             // 0x0abfb15ca7fce092a30ae8ea445a61db3e08c4e1
-                            //if off % 0x20 = 0 then () (* FIXME; check if its |use| = 1*)
+                            //if off % 0x20 = 0 then ()
                             if off = 0 && ty = TyBytes then ()
                             else if ty = TyTop then () (*FIXME: name in 0xee972ad3b8ac062de2e4d5e6ea4a37e36c849a11*)
                             else if (match maybeLen with None -> false | Some bv_len -> BitVector.Ge(bv_off,  bv_len).IsTrue) then
@@ -1701,12 +1639,11 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                         | _ -> ()
 
                     let e= solveInfo.ExpandToKExpr foundValueTagVar
-                    match e with (*aliasing 분석댐ㅎ*)
+                    match e with
                     (*
                       (mptr + const) - mptr
                       => highly likely to be a pointer in the return region
                       => so we can ignore
-                      TODO: expand => 중첩됐을수도 ->
                     *)
                     | KBinOp (_, BinOpType.SUB,
                                 KBinOp (_, BinOpType.ADD, mptr, KNum (_, bv_off)),
@@ -1779,12 +1716,11 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
                       let sloadBytesSymLoc = (SymLoc.Hash ([sloadBaseAddrSymLoc]) + SymLoc.PlaceHolder)
                       let sloadBytesTagVar = TagVarSym sloadBytesSymLoc
                       let ty = fnGetTypeFromTagVar sloadBytesTagVar
-                      // 여기서 확인
                       if ty = TyBytes then
                         let region = fnGetCalldataReturnRegion pubAddr
                         let off = BitVector.ToInt32 bv_off
                         region[off] <- TyBytes
-                      else (* TODO: 기본 로직들은 빼서 합치기 *)
+                      else
                         let ty = fnGetTypeFromTagVar valueTagVar
                         let region = fnGetCalldataReturnRegion pubAddr
                         let off = BitVector.ToInt32 bv_off
@@ -1846,7 +1782,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
               while i < returnRegionLen do
                 region[i] <- TyTop
                 i <- i + 0x20
-          (* FIXME:아래는 다른구현; 참고만할것*)
           (*
           match fnTryGetRootMemVarFromFreePtrTagVar locVar with
           (* this is the current memory region's lower bound in our mem exploration *)
@@ -2057,10 +1992,7 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
     for (KeyValue (privAddr, infos)) in perPrivFunc do
       let args = List ()
       let rets = List ()
-      (* 0, 32, 64,...에서 0: stack top
-         작을 수록 latter
-         따라서 역순으로 sort
-         FIXED: CFG 구현 바뀌어서 단조증가로 *)
+      (* 0, 32, 64,...에서 0: stack top *)
       for info in infos |> Seq.sortBy (fun (_, nth, _) -> nth) do
         let isParam, _nth, ty = info
         if isParam then args.Add <| ty.ToString ()
@@ -2116,9 +2048,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
         fnGetTypeFromVar var|>ignore)
       *)
 
-  /// TODO: where is our functional style?
-  /// 여걸루다가 함수 인자/리턴 def 위치 얻어옴
-  /// TODO: 정확하게 exit들로부터 backward slicing 해야함
   let collectArgRetInfosFromPrivFunc (bld: ICFGBuildable<EVMFuncUserContext, _>)
                                      (m: Dictionary<_, _>) =
     let addr = bld.EntryPoint
@@ -2198,8 +2127,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
       |> Seq.iter (fun (KeyValue (off, (pp, addr, _))) ->
         addInfo pp (PrivRetInfo (pp, addr, off)))
 
-  /// 여기서 private 함수 인자/리턴 분석함
-  /// OPTIM: 이거 ssa lifting 하지 말고 그냥 CP에서 분석한 결과 쓰는게 나을듯?
   let collectArgRetInfosFromPrivFuncs privAddrs =
     /// pp to info
     let m = Dictionary ()
@@ -2284,7 +2211,6 @@ type TypeRecoverer (brew: BinaryBrew<EVMFuncUserContext, DummyContext>,
     else
       (* previous single-threaded version*)
       pubAddrs
-      (* 테스트*)
       (* for testing *)
   #if TYPEDEBUG
       |> Seq.filter (fun pubAddr -> match filterAddr with | None -> true | Some filterAddr -> pubAddr = filterAddr)//pubAddr = 0x3f5UL)//pubAddr = 0x5cbUL)

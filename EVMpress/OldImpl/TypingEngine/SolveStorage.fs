@@ -23,7 +23,6 @@ let rec private convertToSymLoc kExpr =
     SymLoc.BinOp (BinOpType.ADD, kExpr1, kExpr2)
   | _ -> SymLoc.PlaceHolder
 
-///TODO: 이미 쓰인 tag-rule 조합에 대해서는 다시 처리하지 않도록?
 let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
   match tag with
   (*
@@ -31,12 +30,7 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
      : (1) mapping
        (2) array
   *)
-  /// FIXME: 이거 처음에 작성한 rule인데.. 다른 rule들이 이거 subsume할 거 같은디?
-  /// FIXME: 이런 룰들은 굳이 tag가 아니더라도 extract하고 나서 "한번 돌면서" 해도 될듯
   | TagHash (inMem, off, len) ->
-    (* mapping 패턴: (key) | (slot) *)
-    (* slot: 상수 or 변수 *)
-    (* 먼저 0x0에서부터 쓰는지 확인 *)
     match solveInfo.GetKExprFromTagVar off with
     | KNum (_, offBv) ->
       let kLen = solveInfo.GetKExprFromTagVar len
@@ -60,7 +54,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           let secondValue = solveInfo.TryLoadTagVarFromMemoryAtConstant inMem 0x20
           match firstValue, secondValue with
           | Some keyTagVar, Some slotTagVar ->
-            (* slot이 상수인 경우 *)
             match KExpr.tryToBitVector <| solveInfo.GetKExprFromTagVar slotTagVar with
             | None ->
               (* FIXME: maybe phi*)
@@ -69,11 +62,9 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
 #endif
               ()
             | Some slotBv ->
-              (* 새로운 symbolic TagVar 추가 *)
               let symLoc = SymLoc.Hash [ SymLoc.PlaceHolder; SymLoc.Const slotBv ]
               let newTagVar = TagVarSym symLoc
               solveInfo.AddNewTagVar newTagVar
-              (* 서로 연결 *)
               solveInfo.AddEquality currTagVar currTagVar newTagVar
           | _ -> ()
         (*TODO*)
@@ -85,8 +76,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
        등등
   *)
   | TagStorageLoad locTagVar ->
-    //// 여기서 바로 expand하면서 꼴을 본다
-    //// 꼴이 적절하다면 symbolic variable 도입
     let kLoc = solveInfo.ExpandToKExpr locTagVar
 #if TYPEDEBUG
     if true then //checkpointPrint tag then
@@ -108,11 +97,9 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
 #endif
     let cpState = solveInfo.GetCPStateFromTagVar locTagVar
     let funcInfo = solveInfo.GetFuncInfoFromTagVar locTagVar
-    (* sload의 인자를 살펴봄 *)
     match kLoc with
     (*
       sload (sha(slot) + phi)
-      global 배열 가능성
     *)
     | KBinOp
         (_, BinOpType.ADD,
@@ -135,8 +122,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           initial = sha3(slot)
           increment = 1
           this is either an array or bytes(string)
-          =>
-          sym loc 형태: storage (sha3(loc) + _)
         *)
         | KBinOp (_, BinOpType.APP, KFuncName "sha3", KExprList (_, [ KNum (_, bv_slot) ])),
           KNum (_, bv_inc) ->
@@ -145,15 +130,10 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           let symLoc = SymLoc.SLoad symLocPos
           let newTagVar = TagVarSym symLoc
           solveInfo.AddNewTagVar newTagVar
-          (* 루프에서 읽은 값이라는 사실 저장 *)
           solveInfo.AddTag currTagVar newTagVar <| TagReadValueInLoop
-          (* value eq 일단 추가*)
           solveInfo.AddEquality currTagVar currTagVar newTagVar
         | _ -> ()
       ()
-    (*
-      loc 전체가 phi var
-    *)
     | _ when fnIsPhiVar funcInfo (KExpr.toVar kLoc) ->
       let var = KExpr.toVar kLoc
       let phiInfo = fnTryGetPhiLoopInfo funcInfo var
@@ -169,8 +149,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           initial = sha3(slot)
           increment = 1
           this is either an array or bytes(string)
-          =>
-          sym loc 형태: storage (sha3(loc) + _)
         *)
         | KBinOp (_, BinOpType.APP, KFuncName "sha3", KExprList (_, [ KNum (_,bv_slot) ])),
           KNum (_, bv_inc) ->
@@ -181,13 +159,10 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           let symLoc = SymLoc.SLoad symLocPos
           let newTagVar = TagVarSym symLoc
           solveInfo.AddNewTagVar newTagVar
-          (* 루프에서 읽은 값이라는 사실 저장 *)
           solveInfo.AddTag currTagVar newTagVar <| TagReadValueInLoop
-          (* value eq 일단 추가*)
           solveInfo.AddEquality currTagVar currTagVar newTagVar
         | _ -> ()
         ()
-    (* 그냥 uint256 -> 모든 변수가 최소한 이 타입을 갖는다 *)
     | KNum (_, bv_slot) ->
       let symLoc = SymLoc.SLoad (SymLoc.Const bv_slot)
       let newTagVar = TagVarSym symLoc
@@ -195,7 +170,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
       solveInfo.AddEquality currTagVar currTagVar newTagVar
     (*
       (idx / perSlot) + sha3(slot)
-      : compaction 있는 array access
     *)
     | KBinOp
         (_, BinOpType.ADD,
@@ -204,10 +178,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
          KBinOp
            (_, BinOpType.APP, KFuncName "sha3",
             KExprList (_, [ KNum (_, bv_slot) ]))) ->
-      (* uint128이면 -> slot당 2개씩 들어가므로 -> bv_perSlotFields = 2 *)
-      (* 단일 타입의 배열일 수도 있고, struct의 배열일 수도 있다? struct의 경우에는 이렇게 안함 *)
-      (* FIXME: 순서만 살짝 해쉬값이 먼저 오도록 바꿨다 -> side-effect는 없는가? *)
-      (* FIXME: perSLot으로 나누는 부분도 생략함 -> side-effect?*)
       let symLoc =
         SymLoc.SLoad <| SymLoc.BinOp (BinOpType.ADD, SymLoc.Hash [ SymLoc.Const bv_slot ], SymLoc.PlaceHolder)
       let newTagVar = TagVarSym symLoc
@@ -234,8 +204,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
       match args with
       (*
         global dynamic array
-        이때, element가 primitive인지 struct인지 아직 모름
-        만약 (1) idx가 연산없이 단순 i이고 (2) 하나의 sym 안에 여러 타입이 섞여있으면, struct로 간주
       *)
       | [ KNum (_, bvSlot) ] ->
         let symLoc = SymLoc.SLoad <| SymLoc.BinOp (BinOpType.ADD, SymLoc.Keccak256 [ SymLoc.Const bvSlot ], SymLoc.PlaceHolder)
@@ -245,27 +213,20 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
         solveInfo.AddEquality currTagVar currTagVar newTagVar
       | _ -> ()
       *)
-    (* sha3는 keccak256의 resolved된 형태임 *)
     | KBinOp (_, BinOpType.APP, KFuncName "sha3", args) ->
       let args = KExpr.toList args
       match args with
       (*
-        매핑 패턴 with 상수 slot
         sha3(key | slot)
       *)
       | [ kKey; kSlot ] when kSlot.IsKNum ->
         let slotBv = KExpr.toBitVector kSlot
-        (* 새로운 symoblic variable 만들어서 *)
         let symLocLoc = SymLoc.Hash [ SymLoc.PlaceHolder; SymLoc.Const slotBv ]
         let symLocVal = SymLoc.SLoad symLocLoc
         //let tagVarLoc = TagVarSym symLocLoc
-        //solveInfo.AddNewTagVar tagVarLoc (*TODO: 이거랑 실제 저 kLoc이랑 equality? *)
-        (* key 관점 *)
-        (* value 관점 *)
         let newTagVar = TagVarSym symLocVal
         solveInfo.AddNewTagVar newTagVar
         solveInfo.AddEquality currTagVar currTagVar newTagVar
-        (* key 관점 *)
         let keyVar = KExpr.toVar kKey
         let pubAddr = getPubAddrFromTagVar locTagVar
         let keyTagVar = mkTagVarPub pubAddr keyVar
@@ -274,7 +235,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
         mapping (k1 => mapping (k2 => v)) pattern
         sha3(key2 | sha3(key1 | slot))
       *)
-      (* TODO: generalize for arbitrarily nested ones *)
       | [ kKey; KBinOp (Some firstSHA3Var, BinOpType.APP, KFuncName "sha3", args') ] ->
         let args' = KExpr.toList args'
         match args' with
@@ -352,7 +312,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           (_, BinOpType.APP, KFuncName "sload",
            KExprList (_, [ KNum (_, bv_slot) ])))
       when BitVector.calculateKeccak256 bv_slot = bv_sha3 ->
-      (*FIXME: 패턴 호환성위해 임의로 바꿈*)
       (* shape*)
       let symLocBase = SymLoc.BinOp (BinOpType.ADD, SymLoc.Hash [ SymLoc.Const bv_slot ], SymLoc.PlaceHolder)
       let newTagVar = TagVarSym symLocBase
@@ -434,8 +393,7 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
     match kValue with
     (*
 
-      mapping(k => struct{})) store 패턴
-      compaction 된 경우
+      mapping(k => struct{}))
     *)
     | KBinOp
         (_, BinOpType.OR,
@@ -537,7 +495,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
       let someValueTagVar = mkTagVarPub (getPubAddrFromTagVar value) someValueVar
       solveInfo.AddEquality currTagVar newTagVar someValueTagVar
     (*
-      최적화 이빠이 된 경우
       or (
         and (0xffff.....000, sload(c)),
         and (0x0000.....fff, some_value)
@@ -720,13 +677,10 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           && bv_0xffffffff * bv_0x100000000 = bv_0xffffffff00000000 ->
       // bv_0x100000000 (* offset hint *)
       // bv_0xffffffff (* mask hint *)
-      (* symoblic 변수 도입 *)
       (* stor (bv_slot) & bv_ 0xfff.... *)
-      (* 헷갈리니 잘 볼 것*)
       let symLoc = SymLoc.BinOp (BinOpType.AND, SymLoc.SLoad (SymLoc.Const bv_slot), SymLoc.Const bv_0xffffffff00000000)
       let newTagVar = TagVarSym symLoc
       solveInfo.AddNewTagVar newTagVar
-      (* src 값과, 심볼릭 변수의 동등성 추가 *)
       let srcValueVar = KExpr.toVar srcValue
       let srcValueTagVar = mkTagVarPub (getPubAddrFromTagVar value) srcValueVar
       solveInfo.AddEquality currTagVar newTagVar srcValueTagVar
@@ -802,7 +756,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
         && BitVector.isMultipleOfUInt64 bv_0xa0 8UL
         && BitVector.calculateKeccak256 bv_slot = bv_0x290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563
       ->
-      (*compaction때문에 힘들구먼*)
       (*ptr*)
       let symLocPtr = SymLoc.BinOp (BinOpType.ADD, SymLoc.Hash [ SymLoc.Const bv_slot ], SymLoc.PlaceHolder)
       let newTagVar = TagVarSym symLocPtr
@@ -820,12 +773,7 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
   (*
     HasKey
   *)
-  (* mapping에서, key 값 간의 동등성 전파 -- 어차피 value끼리는 이미 잘 전파됨
-     t1 = m and m = t2 => t1.key = t2.key *)
-  (* 만약, 어떤 mapping 형태의 sym var와 관계가 있다면 *)
-  (* TODO: 방향성 고려? *)
   | TagHasKey keyTagVar ->
-    (* 다른 애들과의 동등성 추가 *)
     (* TODO: maybe dangerous*)
     for tag in solveInfo.GetTagsFromTagVar currTagVar do
       match tag with
@@ -834,7 +782,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
       | _ -> ()
   (*
     AND 연산
-    memory aliasing 고려해서 여기서 처리
     (SymVar & 0xffff...)
     compaction
   *)
@@ -858,15 +805,11 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           |> Some
         | _ -> None
 
-      (*
-        패턴 보기
-      *)
       match kExpr1, kExpr2 with
       (*
         global compaction
         (sload(n) / (1 << a0)) & 0xff
         =>
-        slot,off,mask(len)까지 모두 알려주는 케이스
       *)
       | KNum (_, bv_0xff),
          KBinOp
@@ -895,10 +838,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
           && bv_0x1.IsOne
           && BitVector.isMultipleOfUInt64 bv_0xa0 8UL ->
         //let absoluteBitmask = bv_0xff * (bv_0x1.Shl bv_0xa0)
-        (*FIXME: 일부러 length는 mask에서 생략!! length를 모를때와의 호환성을 위해!*)
-        (*일부러 bits=1로 만든다*)
-        (*대신, 바로 아래서 크기에 대한 constraint 생성 *)
-        (*TODO:이렇게할거면, AND라고 표현하지 말고, 뭐 다른 표현으로? e.g. StorageWithOffset=... 나중에 ㅠ*)
         let absoluteBitmask = BitVector.Shl(bv_0x1, bv_0xa0)
         let symLoc = SymLoc.BinOp (BinOpType.AND, SymLoc.SLoad (SymLoc.Const bv_slot), SymLoc.Const absoluteBitmask)
         let newTagVar = TagVarSym symLoc
@@ -929,8 +868,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
         solveInfo.AddEquality currTagVar currTagVar newTagVar
       (*
         (sload(...) / 0x1000....) & 0xff
-        위엣거 일반화
-        TODO: 이런 식으로 다 일반화하면 됨 ofKExpr써서 나중에 공개하기전에 ㄱㄱ
       *)
       | KBinOp
           (_, BinOpType.DIV,
@@ -948,7 +885,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
         | TagVarPublic (pubAddr, _)
           when solveInfo.ConvertToStorageSymLoc pubAddr someLocKExpr <> SymLoc.PlaceHolder
           ->
-          (* 여기서, someLocKExpr으로부터 sym loc을 파싱해와야함 *)
           let innerSymLoc = solveInfo.ConvertToStorageSymLoc pubAddr someLocKExpr
           let posBitmask = KExpr.constantFolding someDivisor |> KExpr.toBitVector
           let symLoc = SymLoc.SLoad innerSymLoc &&& SymLoc.Const posBitmask
@@ -1028,7 +964,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
         | _ -> ()
       (*
         msg.data(off) & 0xffffffff00000.......00
-        bytesN 패턴
       *)
       | KBinOp (_, BinOpType.APP, KFuncName "msg.data", args),
         KNum (_, bv)
@@ -1041,7 +976,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
         solveInfo.AddTag currTagVar currTagVar tagHasType |> ignore
       | _ -> ()
 
-      (* sybolic 변수 갖는지 체크 *)
       let tryGetSymLoc tagVar =
         match solveInfo.PerVarTags.TryGetValue tagVar with
         | false, _ -> None
@@ -1066,7 +1000,6 @@ let handleStorageTags (solveInfo: SolveInfo) currTagVar tag =
     fn tagVar2 tagVar1
   (*
   (*
-    storage 변수 도입
     ex) (sload(0) & (1 << a0) - 1) => (slot=0, off=0)
   *)
   | TagAndOp (tag1, tag2) ->

@@ -41,7 +41,6 @@ module private SolveCalldataHelper =
   let handleTagCalldataLoad (solveInfo: SolveInfo) currTagVar locTagVar =
     let kExpr = solveInfo.GetKExprFromTagVar locTagVar
     let pubAddr = getPubAddrFromTagVar locTagVar
-    (* TODO: 어느 정도 pattern 일반화되면, storage에서처럼 SymLoc으로 변환하는 함수 도입 *)
     match kExpr with
     (*
       phi
@@ -181,11 +180,6 @@ module private SolveCalldataHelper =
 
     let fnFixMe () =
       match srcKExpr with
-      (*
-        배열 초기화 패턴!
-         memory 관련
-        => either bytes or array
-      *)
       | KBinOp (_, _, KFuncName "msg.data.size", _) ->
         match dstKExpr with
         | KBinOp (_, BinOpType.ADD, KNum (_, bv_0x20), someFreePtr)
@@ -221,10 +215,8 @@ module private SolveCalldataHelper =
         match lenKExpr with
         (*
           len = cl(...)
-          => bytes (바이트 그대로 복사)
         *)
         | KBinOp (_, _, KFuncName "msg.data", _) ->
-          (* 여기서 someCPtr 파싱; TODO: 일반화 *)
           match someCPtr with
           (*
             0x4 + cl(0x4)
@@ -237,9 +229,6 @@ module private SolveCalldataHelper =
             let [ kInnerLoc ] = KExpr.toList args
             match KExpr.constantFolding kInnerLoc with
             | KNum (_, bv_loc) ->
-              (* TODO: 이렇게 하면 헷갈린다. 상수더라도 calldata, storage 구분가능하게 해야함 *)
-              (* 그러나 애매한 부분이 있어서 Const 사용하는 것으로 rollback한다*)
-              (* bytes 타입은 상수에게 주어져야지, calldata로 감싼 것에는 주어지면 안됨 *)
               let symLoc = SymLoc.Const bv_loc
               let symLoc = convertToCallSymLoc pubAddr someCPtr
               let symLocTagVar = TagVarSym symLoc
@@ -318,7 +307,6 @@ module private SolveCalldataHelper =
                 calldataBaseLoc)
         when BitVector.isEqualTo bv_0x20 0x20
         ->
-        (* TODO: "type이 같다"를 새로 추가? *)
         let calldataBaseLocSymLoc = convertToCallSymLoc pubAddr calldataBaseLoc
         let calldataBaseLocSymLocTagVar = TagVarSym calldataBaseLocSymLoc
         let freeMemPtrVar = freeMemPtr |> KExpr.toVar
@@ -335,7 +323,6 @@ module private SolveCalldataHelper =
       ccopy(mptr + 0x40, 0x20 + cptr, *cptr)
       ccopy(_, 0x20 + cptr, *cptr)
       => cptr => bytes
-      이때, cptr = base + *cptr' (e.g. 0x4 + cl(0x4))
     *)
     //| KBinOp (_, BinOpType.ADD, KBinOp (_, _, KFuncName "mload", args), KNum (_, bv_0x20))
     //  when BitVector.isEqualTo bv_0x20 0x20 ->

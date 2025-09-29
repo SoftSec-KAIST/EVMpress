@@ -32,18 +32,17 @@ module private SolveMemoryHelper =
       let freeMemPtrTagVar = TagVarPublic (pubAddr, freeMemPtrVar)
       match tryGetRootMemVarFromFreePtrTagVar solveInfo freeMemPtrTagVar with
       | None -> ()
-      | Some rootFreeMemVar -> (* 이 변수가 free mem을 대변할 것 *)
+      | Some rootFreeMemVar ->
         let rootFreeMemId = rootFreeMemVar.Identifier
         let freeMemPtrSymLoc = SymLoc.FreeMemPtr (pubAddr, rootFreeMemId)
         let freeMemPtrSymLocTagVar = TagVarSym freeMemPtrSymLoc
         (* t(mptr) <: T[] *)
-        //let tyArray = TyArray (TyTop, 0) (*TODO: Top이 올바른가?*)
+        //let tyArray = TyArray (TyTop, 0)
         //solveInfo.AddTag currTagVar freeMemPtrSymLocTagVar <| TagHasType tyArray
         (* elem = x *)
         let elemSymLoc = SymLoc.MLoad (pubAddr, freeMemPtrSymLoc + SymLoc.Const bv_0x20)
         let elemSymLocTagVar = TagVarSym elemSymLoc
         solveInfo.AddEquality currTagVar currTagVar elemSymLocTagVar
-        (* 원소 타입 표시하는 tag *)
         solveInfo.AddTag currTagVar freeMemPtrSymLocTagVar <| TagArray (elemSymLocTagVar, 0)
         // solveInfo.AddTag currTagVar freeMemPtrSymLocTagVar <| TagHasElemAs elemSymLocTagVar
     | _ -> ()
@@ -51,7 +50,6 @@ module private SolveMemoryHelper =
   let handleTagRawMemStore (solveInfo: SolveInfo) currTagVar inMemTagVar addrTagVar valueTagVar =
     let addrKExpr = solveInfo.GetKExprFromTagVar addrTagVar
     let pubAddr = getPubAddrFromTagVar addrTagVar
-    (* 중심 free mem ptr 추출해서, 있으면 걔에 대해서 root mem var 구해서, tag 걸어주기 *)
     match KExpr.tryExtractMPtr addrKExpr with
     | Some baseMPtr ->
       for termKExpr in KExpr.collectAddOperands addrKExpr do
@@ -60,7 +58,7 @@ module private SolveMemoryHelper =
       let properAddrTagVar = baseMPtr |> KExpr.toVar |> fun v -> TagVarPublic (pubAddr, v)
       match tryGetRootMemVarFromFreePtrTagVar solveInfo properAddrTagVar with
       | None -> ()
-      | Some rootFreeMemVar -> (* 이 변수가 free mem을 대변할 것 *)
+      | Some rootFreeMemVar ->
         let rootFreeMemId = rootFreeMemVar.Identifier
 #if TYPEDEBUG
         let valueKExpr = solveInfo.GetKExprFromTagVar valueTagVar
@@ -81,14 +79,13 @@ module private SolveMemoryHelper =
         solveInfo.AddTag currTagVar currTagVar <| TagHasFreeMemStore (rootFreeMemTagVar, addrTagVar, valueTagVar)
     | None -> ()(*TODO*)
 
-    // symloc으로 표현하기
     match addrKExpr with
     | KBinOp (_, BinOpType.APP, KFuncName "mload", args) ->
       let kFreePtr = addrKExpr
       let tagVar = kFreePtr |> KExpr.toVar |> fun v -> TagVarPublic (pubAddr, v)
       match tryGetRootMemVarFromFreePtrTagVar solveInfo tagVar with
       | None -> ()
-      | Some rootFreeMemVar -> (* 이 변수가 free mem을 대변할 것 *)
+      | Some rootFreeMemVar ->
         let rootFreeMemId = rootFreeMemVar.Identifier
         let symLocFreePtr = SymLoc.FreeMemPtr (pubAddr, rootFreeMemId)
         let symLocLoc = symLocFreePtr
@@ -110,7 +107,7 @@ module private SolveMemoryHelper =
       let tagVar = kFreePtr |> KExpr.toVar |> fun v -> TagVarPublic (pubAddr, v)
       match tryGetRootMemVarFromFreePtrTagVar solveInfo tagVar with
       | None -> ()
-      | Some rootFreeMemVar -> (* 이 변수가 free mem을 대변할 것 *)
+      | Some rootFreeMemVar ->
         let rootFreeMemId = rootFreeMemVar.Identifier
         let symLocFreePtr = SymLoc.FreeMemPtr (pubAddr, rootFreeMemId)
         let constOff = bv_const
@@ -184,7 +181,7 @@ module private SolveMemoryHelper =
         let properAddrTagVar = properAddrKExpr |> KExpr.toVar |> fun v -> TagVarPublic (pubAddr, v)
         match tryGetRootMemVarFromFreePtrTagVar solveInfo properAddrTagVar with
         | None -> ()
-        | Some rootFreeMemVar -> (* 이 변수가 free mem을 대변할 것 *)
+        | Some rootFreeMemVar ->
           let rootFreeMemId = rootFreeMemVar.Identifier
 #if TYPEDEBUG
           let valueKExpr = solveInfo.GetKExprFromTagVar valueTagVar
@@ -204,10 +201,6 @@ module private SolveMemoryHelper =
           //solveInfo.AddTag currTagVar symLocLocTagVar <| TagHasMemStore (rootFreeMemTagVar, addrTagVar, valueTagVar)
           solveInfo.AddTag currTagVar currTagVar <| TagHasFreeMemStore (rootFreeMemTagVar, addrTagVar, valueTagVar)
       | _ -> ()
-    (*
-      다른 표현
-      ex) 0x40 + (i + mptr) |-> v
-    *)
     | otherKExpr ->
       ()
     *)
